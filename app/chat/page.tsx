@@ -1,291 +1,40 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useSession } from '@/lib/auth-client';
-import { useRouter } from 'next/navigation';
-import { useCustomer } from '@/hooks/useAutumnCustomer';
-import { Button } from '@/components/ui/button';
-import { Send, Menu, X, MessageSquare, Plus, Trash2 } from 'lucide-react';
 import { useConversations, useConversation, useDeleteConversation } from '@/hooks/useConversations';
 import { useSendMessage } from '@/hooks/useMessages';
-import { format } from 'date-fns';
-import { ConfirmationDialog } from '@/components/ui/confirmation-dialog';
+import { useSession } from '@/lib/auth-client';
+import { useState, useRef, useEffect, useMemo } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import type { Message } from '@/lib/db/schema';
 
-// Separate component that uses Autumn hooks
-function ChatContent({ session }: { session: any }) {
-  const router = useRouter();
-  const { allowed, customer, refetch } = useCustomer();
-  const [input, setInput] = useState('');
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [conversationToDelete, setConversationToDelete] = useState<string | null>(null);
-  
-  // Queries and mutations
-  const { data: conversations, isLoading: conversationsLoading } = useConversations();
-  const { data: currentConversation } = useConversation(selectedConversationId);
-  const sendMessage = useSendMessage();
-  const deleteConversation = useDeleteConversation();
-  
-  // Get message usage data
-  const messageUsage = customer?.features?.messages;
-  const remainingMessages = messageUsage ? (messageUsage.balance || 0) : 0;
-  const hasMessages = remainingMessages > 0;
-  const isCustomerLoading = !customer && !session; // Still loading customer data
-
-  // Removed auto-scroll functionality
-
-  const handleSendMessage = async () => {
-    if (!input.trim() || sendMessage.isPending) return;
-
-    // Check if user has messages available
-    if (!allowed({ featureId: 'messages' })) {
-      return;
-    }
-
-    try {
-      const response = await sendMessage.mutateAsync({
-        conversationId: selectedConversationId,
-        message: input,
-      });
-      
-      setInput('');
-      
-      // If this created a new conversation, select it
-      if (!selectedConversationId && response.conversationId) {
-        setSelectedConversationId(response.conversationId);
-      }
-      
-      // Refetch customer data to update credits in navbar
-      await refetch();
-    } catch (error: any) {
-      console.error('Failed to send message:', error);
-    }
-  };
-  
-  const handleNewConversation = () => {
-    setSelectedConversationId(null);
-  };
-  
-  const handleDeleteConversation = async (conversationId: string) => {
-    setConversationToDelete(conversationId);
-    setDeleteDialogOpen(true);
-  };
-
-  const confirmDelete = async () => {
-    if (conversationToDelete) {
-      await deleteConversation.mutateAsync(conversationToDelete);
-      if (selectedConversationId === conversationToDelete) {
-        setSelectedConversationId(null);
-      }
-      setConversationToDelete(null);
-    }
-  };
-
-  return (
-    <div className="flex h-screen bg-gray-50">
-      {/* Sidebar */}
-      <div className={`${sidebarOpen ? 'w-64' : 'w-0'} bg-white border-r overflow-hidden flex flex-col transition-all duration-200`}>
-        <div className="p-4 border-b">
-          <Button
-            onClick={handleNewConversation}
-            className="w-full btn-firecrawl-orange"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            New Chat
-          </Button>
-        </div>
-        
-        <div className="overflow-y-auto flex-1">
-          {conversationsLoading ? (
-            <div className="p-4 text-center text-gray-500">Loading conversations...</div>
-          ) : conversations?.length === 0 ? (
-            <div className="p-4 text-center text-gray-500">No conversations yet</div>
-          ) : (
-            <div className="space-y-1 p-2">
-              {conversations?.map((conversation) => (
-                <div
-                  key={conversation.id}
-                  className={`p-3 rounded-lg cursor-pointer hover:bg-gray-100 ${
-                    selectedConversationId === conversation.id ? 'bg-gray-100' : ''
-                  }`}
-                  onClick={() => setSelectedConversationId(conversation.id)}
-                >
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium truncate">
-                        {conversation.title || 'Untitled Conversation'}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        {conversation.lastMessageAt && format(new Date(conversation.lastMessageAt), 'MMM d, h:mm a')}
-                      </p>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteConversation(conversation.id);
-                      }}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-        
-        <div className="p-4 border-t bg-gray-50">
-          <div className="text-sm text-gray-600">
-            <p>Messages remaining:</p>
-            <p className="text-2xl font-bold text-orange-600">{remainingMessages}</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col">
-        {/* Header */}
-        <div className="bg-white border-b px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-            >
-              {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-            </Button>
-            <h1 className="font-semibold">
-              {currentConversation?.title || 'New Conversation'}
-            </h1>
-          </div>
-        </div>
-
-        {/* Messages Area */}
-        <div className="flex-1 overflow-y-auto p-4">
-          {isCustomerLoading ? (
-            <div className="flex items-center justify-center h-full">
-              <div className="text-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-4"></div>
-                <p className="text-gray-600">Loading your account data...</p>
-              </div>
-            </div>
-          ) : !hasMessages ? (
-            <div className="flex items-center justify-center h-full">
-              <div className="text-center max-w-md">
-                <MessageSquare className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <h2 className="text-xl font-semibold mb-2">Credit-Based Messaging</h2>
-                <p className="text-gray-600 mb-4">
-                  This is a demonstration of the credit-based messaging system. Each message consumes credits from your account balance.
-                </p>
-                <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-4">
-                  <p className="text-sm text-orange-800">
-                    You currently have <span className="font-bold">{remainingMessages}</span> message credits available.
-                  </p>
-                </div>
-                <Button
-                  onClick={() => router.push('/plans')}
-                  className="btn-firecrawl-orange"
-                >
-                  Get More Credits
-                </Button>
-              </div>
-            </div>
-          ) : currentConversation?.messages && currentConversation.messages.length > 0 ? (
-            <div className="space-y-4 mb-20">
-              {currentConversation.messages.map((message) => (
-                <div
-                  key={message.id}
-                  className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                >
-                  <div
-                    className={`max-w-[70%] rounded-lg px-4 py-2 ${
-                      message.role === 'user'
-                        ? 'bg-orange-500 text-white'
-                        : 'bg-gray-100 text-gray-900'
-                    }`}
-                  >
-                    <p className="whitespace-pre-wrap">{message.content}</p>
-                    <p className={`text-xs mt-1 ${
-                      message.role === 'user' ? 'text-orange-100' : 'text-gray-500'
-                    }`}>
-                      {format(new Date(message.createdAt), 'h:mm a')}
-                    </p>
-                  </div>
-                </div>
-              ))}
-              {sendMessage.isPending && (
-                <div className="flex justify-start">
-                  <div className="bg-gray-100 text-gray-900 rounded-lg px-4 py-2">
-                    <div className="flex space-x-1">
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" />
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }} />
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="flex items-center justify-center h-full">
-              <div className="text-center">
-                <MessageSquare className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <h2 className="text-xl font-semibold mb-2">Start a Conversation</h2>
-                <p className="text-gray-600">
-                  Send a message to begin chatting with AI
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Input Area */}
-        <div className="border-t bg-white p-4">
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleSendMessage();
-            }}
-            className="flex gap-2"
-          >
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder={hasMessages ? "Type your message..." : "No messages available"}
-              disabled={!hasMessages || sendMessage.isPending}
-              className="flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:bg-gray-100 disabled:text-gray-500"
-            />
-            <Button
-              type="submit"
-              disabled={!hasMessages || !input.trim() || sendMessage.isPending}
-              className="btn-firecrawl-orange"
-            >
-              <Send className="w-4 h-4" />
-            </Button>
-          </form>
-        </div>
-      </div>
-      
-      <ConfirmationDialog
-        open={deleteDialogOpen}
-        onOpenChange={setDeleteDialogOpen}
-        title="Delete Conversation"
-        description="Are you sure you want to delete this conversation? This action cannot be undone."
-        confirmText="Delete"
-        cancelText="Cancel"
-        onConfirm={confirmDelete}
-        isLoading={deleteConversation.isPending}
-      />
-    </div>
-  );
-}
+import { Send, MessageCircle, Loader2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
 export default function ChatPage() {
   const { data: session, isPending } = useSession();
   const router = useRouter();
+  const { data: conversations, isLoading: conversationsLoading, refetch: refetchConversations } = useConversations();
+  const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
+  const { data: conversationData, isLoading: messagesLoading, refetch: refetchMessages } = useConversation(selectedConversation);
+  const sendMessageMutation = useSendMessage();
+  const deleteConversationMutation = useDeleteConversation();
+  const [input, setInput] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const messages = useMemo(() => {
+    return conversationData?.messages || [];
+  }, [conversationData?.messages]);
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
 
   useEffect(() => {
     if (!isPending && !session) {
@@ -295,7 +44,7 @@ export default function ChatPage() {
 
   if (isPending || !session) {
     return (
-      <div className="flex h-screen items-center justify-center">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-4"></div>
           <p className="text-gray-600">Loading...</p>
@@ -304,5 +53,204 @@ export default function ChatPage() {
     );
   }
 
-  return <ChatContent session={session} />;
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!input.trim() || isSubmitting) return;
+
+    setIsSubmitting(true);
+    try {
+      await sendMessageMutation.mutateAsync({
+        message: input.trim(),
+        conversationId: selectedConversation || undefined,
+      });
+      setInput('');
+      await refetchMessages();
+      await refetchConversations();
+      scrollToBottom();
+    } catch (error) {
+      console.error('Error sending message:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const startNewConversation = () => {
+    setSelectedConversation(null);
+    setInput('');
+  };
+
+  const deleteConversation = async (conversationId: string) => {
+    try {
+      await deleteConversationMutation.mutateAsync(conversationId);
+      if (selectedConversation === conversationId) {
+        setSelectedConversation(null);
+      }
+      await refetchConversations();
+    } catch (error) {
+      console.error('Error deleting conversation:', error);
+    }
+  };
+
+  const formatMessageContent = (content: string) => {
+    return content.split('\n').map((line, index) => (
+      <span key={index}>
+        {line}
+        <br />
+      </span>
+    ));
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <div className="max-w-7xl mx-auto px-4 py-8">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">AI Chat</h1>
+          <p className="text-gray-600">Chat with AI assistants for help and information</p>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          {/* Sidebar - Conversations */}
+          <div className="lg:col-span-1">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between">
+                  <span className="flex items-center gap-2">
+                    <MessageCircle className="h-5 w-5" />
+                    Conversations
+                  </span>
+                  <Button
+                    onClick={startNewConversation}
+                    size="sm"
+                    className="btn-firecrawl-orange"
+                  >
+                    New Chat
+                  </Button>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {conversationsLoading ? (
+                  <div className="flex justify-center py-4">
+                    <Loader2 className="h-6 w-6 animate-spin" />
+                  </div>
+                ) : conversations && conversations.length > 0 ? (
+                  <div className="space-y-2">
+                    {conversations.map((conversation) => (
+                      <div key={conversation.id} className="flex items-center justify-between">
+                        <button
+                          onClick={() => setSelectedConversation(conversation.id)}
+                          className={`flex-1 text-left p-2 rounded-lg text-sm hover:bg-gray-100 ${
+                            selectedConversation === conversation.id ? 'bg-gray-100 font-medium' : ''
+                          }`}
+                        >
+                          <div className="truncate">
+                            {conversation.title || 'New Conversation'}
+                          </div>
+                          <div className="text-xs text-gray-500 truncate">
+                            {conversation.messages && conversation.messages.length > 0
+                              ? conversation.messages[conversation.messages.length - 1].content.substring(0, 50)
+                              : 'No messages yet'}
+                          </div>
+                        </button>
+                        <Button
+                          onClick={() => deleteConversation(conversation.id)}
+                          size="sm"
+                          variant="ghost"
+                          className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                          disabled={deleteConversationMutation.isPending}
+                        >
+                          {deleteConversationMutation.isPending ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            '×'
+                          )}
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-gray-500 text-sm py-4 text-center">
+                    No conversations yet. Start a new chat!
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Main Chat Area */}
+          <div className="lg:col-span-3">
+            <Card className="h-[600px] flex flex-col">
+              <CardHeader className="border-b">
+                <CardTitle className="flex items-center gap-2">
+                  <MessageCircle className="h-5 w-5" />
+                  {selectedConversation ? conversationData?.title || 'Chat' : 'New Chat'}
+                </CardTitle>
+              </CardHeader>
+              
+              {/* Messages Area */}
+              <CardContent className="flex-1 overflow-y-auto p-4">
+                {messagesLoading ? (
+                  <div className="flex justify-center items-center h-full">
+                    <Loader2 className="h-8 w-8 animate-spin" />
+                  </div>
+                ) : messages.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-full text-gray-500">
+                    <MessageCircle className="h-12 w-12 mb-4" />
+                    <p>Start a conversation by typing a message below</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {messages.map((message: Message) => (
+                      <div
+                        key={message.id}
+                        className={`flex ${
+                          message.role === 'user' ? 'justify-end' : 'justify-start'
+                        }`}
+                      >
+                        <div
+                          className={`max-w-[80%] p-3 rounded-lg ${
+                            message.role === 'user'
+                              ? 'bg-orange-500 text-white'
+                              : 'bg-gray-100 text-gray-900'
+                          }`}
+                        >
+                          <div className="whitespace-pre-wrap">
+                            {formatMessageContent(message.content)}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    <div ref={messagesEndRef} />
+                  </div>
+                )}
+              </CardContent>
+
+              {/* Input Form */}
+              <div className="border-t p-4">
+                <form onSubmit={handleSubmit} className="flex gap-2">
+                  <Input
+                    value={input}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInput(e.target.value)}
+                    placeholder="Type your message..."
+                    disabled={isSubmitting}
+                    className="flex-1"
+                  />
+                  <Button
+                    type="submit"
+                    disabled={!input.trim() || isSubmitting}
+                    className="btn-firecrawl-orange"
+                  >
+                    {isSubmitting ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Send className="h-4 w-4" />
+                    )}
+                  </Button>
+                </form>
+              </div>
+            </Card>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }

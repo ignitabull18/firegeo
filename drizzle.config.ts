@@ -11,6 +11,6 @@ export default {
   dbCredentials: {
     url: process.env.DATABASE_URL!,
   },
-  // Exclude Better Auth tables from migrations since they're managed by Better Auth
-  tablesFilter: ['!user', '!session', '!account', '!verification'],
+  // Exclude Supabase Auth tables from migrations since they're managed by Supabase
+  tablesFilter: ['!auth.*'],
 } satisfies Config;

@@ -3,13 +3,11 @@
 import React, { useReducer, useCallback, useState, useEffect, useRef } from 'react';
 import { Company } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Sparkles } from 'lucide-react';
-import { CREDITS_PER_BRAND_ANALYSIS } from '@/config/constants';
+
 import { ClientApiError } from '@/lib/client-errors';
 import { 
   brandMonitorReducer, 
   initialBrandMonitorState,
-  BrandMonitorAction,
   IdentifiedCompetitor
 } from '@/lib/brand-monitor-reducer';
 import {
@@ -42,8 +40,8 @@ import { useSSEHandler } from './hooks/use-sse-handler';
 interface BrandMonitorProps {
   creditsAvailable?: number;
   onCreditsUpdate?: () => void;
-  selectedAnalysis?: any;
-  onSaveAnalysis?: (analysis: any) => void;
+  selectedAnalysis?: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  onSaveAnalysis?: (analysis: any) => void; // eslint-disable-line @typescript-eslint/no-explicit-any
 }
 
 export function BrandMonitor({ 
@@ -53,9 +51,8 @@ export function BrandMonitor({
   onSaveAnalysis 
 }: BrandMonitorProps = {}) {
   const [state, dispatch] = useReducer(brandMonitorReducer, initialBrandMonitorState);
-  const [demoUrl] = useState('example.com');
   const saveAnalysis = useSaveBrandAnalysis();
-  const [isLoadingExistingAnalysis, setIsLoadingExistingAnalysis] = useState(false);
+  const [, setIsLoadingExistingAnalysis] = useState(false);
   const hasSavedRef = useRef(false);
   
   const { startSSEConnection } = useSSEHandler({ 
@@ -74,7 +71,7 @@ export function BrandMonitor({
           analysisData: completedAnalysis,
           competitors: identifiedCompetitors,
           prompts: analyzingPrompts,
-          creditsUsed: CREDITS_PER_BRAND_ANALYSIS
+          creditsUsed: 0
         };
         
         saveAnalysis.mutate(analysisData, {
@@ -109,7 +106,6 @@ export function BrandMonitor({
     customPrompts,
     removedDefaultPrompts,
     identifiedCompetitors,
-    availableProviders,
     analysisProgress,
     promptCompletionStatus,
     analyzingPrompts,
@@ -241,11 +237,11 @@ export function BrandMonitor({
           console.log('Showing company card');
         }, 50);
       }, 500);
-    } catch (error: any) {
+    } catch (error: unknown) {
       let errorMessage = 'Failed to extract company information';
       if (error instanceof ClientApiError) {
         errorMessage = error.getUserMessage();
-      } else if (error.message) {
+      } else if (error instanceof Error && error.message) {
         errorMessage = `Failed to extract company information: ${error.message}`;
       }
       dispatch({ type: 'SET_ERROR', payload: errorMessage });
@@ -269,7 +265,7 @@ export function BrandMonitor({
         const data = await response.json();
         dispatch({ type: 'SET_AVAILABLE_PROVIDERS', payload: data.providers || ['OpenAI', 'Anthropic', 'Google'] });
       }
-    } catch (e) {
+    } catch {
       // Default to providers with API keys if check fails
       const defaultProviders = [];
       if (process.env.NEXT_PUBLIC_HAS_OPENAI_KEY) defaultProviders.push('OpenAI');
@@ -346,11 +342,7 @@ export function BrandMonitor({
     // Reset saved flag for new analysis
     hasSavedRef.current = false;
 
-    // Check if user has enough credits
-    if (creditsAvailable < CREDITS_PER_BRAND_ANALYSIS) {
-      dispatch({ type: 'SET_ERROR', payload: `Insufficient credits. You need at least ${CREDITS_PER_BRAND_ANALYSIS} credits to run an analysis.` });
-      return;
-    }
+
 
     // Immediately trigger credit update to reflect deduction in navbar
     if (onCreditsUpdate) {
@@ -387,7 +379,7 @@ export function BrandMonitor({
     dispatch({ type: 'SET_ANALYSIS_TILES', payload: [] });
     
     // Initialize prompt completion status
-    const initialStatus: any = {};
+    const initialStatus: any = {}; // eslint-disable-line @typescript-eslint/no-explicit-any
     const expectedProviders = getEnabledProviders().map(config => config.name);
     
     normalizedPrompts.forEach(prompt => {
@@ -411,7 +403,7 @@ export function BrandMonitor({
     } finally {
       dispatch({ type: 'SET_ANALYZING', payload: false });
     }
-  }, [company, removedDefaultPrompts, customPrompts, identifiedCompetitors, startSSEConnection, creditsAvailable]);
+  }, [company, removedDefaultPrompts, customPrompts, identifiedCompetitors, startSSEConnection, onCreditsUpdate]);
   
   const handleRestart = useCallback(() => {
     dispatch({ type: 'RESET_STATE' });
@@ -438,7 +430,6 @@ export function BrandMonitor({
   
   return (
     <div className="flex flex-col">
-
       {/* URL Input Section */}
       {showInput && (
         <div className="flex items-center justify-center min-h-[50vh]">

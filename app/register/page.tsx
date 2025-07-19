@@ -20,29 +20,26 @@ export default function RegisterPage() {
     setShowExistingAccountOptions(false);
 
     try {
-      const response = await signUp.email({
+      await signUp.email({
         name,
         email,
         password,
       });
       
-      // Only redirect if signup was successful
-      if (!response.error) {
-        // Wait a moment for the session to be properly set
-        await new Promise(resolve => setTimeout(resolve, 100));
-        
-        // Force a hard navigation to ensure cookies are sent
-        window.location.href = '/';
-      } else {
-        throw response.error;
-      }
-    } catch (err: any) {
-      const errorMessage = err.message || 'Failed to register';
+      // Registration successful
+      setError('');
+      // Wait a moment for the session to be properly set
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Force a hard navigation to ensure cookies are sent
+      window.location.href = '/dashboard';
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to register';
       setError(errorMessage);
       
       // Check if the error is about existing account
-      // Better Auth returns 422 status for existing accounts
-      if (err.status === 422 ||
+      // Supabase returns specific error messages for existing accounts
+      if ((error as { status?: number })?.status === 422 ||
           errorMessage.toLowerCase().includes('already exists') || 
           errorMessage.toLowerCase().includes('already registered') ||
           errorMessage.toLowerCase().includes('existing email') ||

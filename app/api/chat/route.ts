@@ -1,124 +1,86 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
-import { Autumn } from 'autumn-js';
 import { db } from '@/lib/db';
 import { conversations, messages } from '@/lib/db/schema';
 import { eq, and, desc } from 'drizzle-orm';
 import { 
   AuthenticationError, 
-  InsufficientCreditsError, 
   ValidationError, 
-  DatabaseError,
-  ExternalServiceError,
   handleApiError 
 } from '@/lib/api-errors';
 import { 
-  FEATURE_ID_MESSAGES, 
-  CREDITS_PER_MESSAGE,
-  ERROR_MESSAGES,
   ROLE_USER,
-  ROLE_ASSISTANT,
-  UI_LIMITS
+  ROLE_ASSISTANT
 } from '@/config/constants';
+import { createServerClient } from '@supabase/ssr';
 
-const autumn = new Autumn({
-  apiKey: process.env.AUTUMN_SECRET_KEY!,
-});
+async function getUser(request: NextRequest) {
+  const supabaseServer = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll()
+        },
+        setAll() {
+          // Server-side, we don't set cookies in API routes
+        },
+      },
+    }
+  );
 
+  const { data: { user } } = await supabaseServer.auth.getUser();
+  if (!user) {
+    throw new AuthenticationError();
+  }
+  return user;
+}
+
+// POST endpoint to handle chat messages
 export async function POST(request: NextRequest) {
   try {
-    // Get the session
-    const sessionResponse = await auth.api.getSession({
-      headers: request.headers,
-    });
-
-    if (!sessionResponse?.user) {
-      console.error('No session found in chat API');
-      throw new AuthenticationError('Please log in to use the chat');
-    }
-
-    console.log('Chat API - User:', sessionResponse.user.id);
-
-    const { message, conversationId } = await request.json();
-
-    if (!message || typeof message !== 'string') {
-      throw new ValidationError('Invalid message format', {
-        message: 'Message must be a non-empty string'
-      });
-    }
-
-    // Check if user has access to use the chat
-    try {
-      console.log('Checking access for:', {
-        userId: sessionResponse.user.id,
-        featureId: 'messages',
-      });
-      
-      const access = await autumn.check({
-        customer_id: sessionResponse.user.id,
-        feature_id: FEATURE_ID_MESSAGES,
-      });
-      
-      console.log('Access check result:', access);
-
-      if (!access.data?.allowed) {
-        console.log('Access denied - no credits remaining');
-        throw new InsufficientCreditsError(
-          ERROR_MESSAGES.NO_CREDITS_REMAINING,
-          CREDITS_PER_MESSAGE,
-          access.data?.balance || 0 
-        );
-      }
-    } catch (err) {
-      console.error('Failed to check access:', err);
-      if (err instanceof InsufficientCreditsError) {
-        throw err; // Re-throw our custom errors
-      }
-      throw new ExternalServiceError('Unable to verify credits. Please try again', 'autumn');
-    }
-
-    // Track API usage with Autumn
-    try {
-      await autumn.track({
-        customer_id: sessionResponse.user.id,
-        feature_id: FEATURE_ID_MESSAGES,
-        count: CREDITS_PER_MESSAGE,
-      });
-    } catch (err) {
-      console.error('Failed to track usage:', err);
-      throw new ExternalServiceError('Unable to process credit usage. Please try again', 'autumn');
-    }
-
-    // Get or create conversation
-    let currentConversation;
+    const user = await getUser(request);
     
+    const { message, conversationId } = await request.json();
+    
+    if (!message?.trim()) {
+      throw new ValidationError('Message cannot be empty');
+    }
+
+    if (message.length > 10000) {
+      throw new ValidationError('Message too long. Maximum 10,000 characters allowed.');
+    }
+
+    console.log('[Chat] User:', user.id, 'Conversation:', conversationId);
+    console.log('[Chat] Message length:', message.length);
+
+    let currentConversation;
+
     if (conversationId) {
       // Find existing conversation
-      const existingConversation = await db.query.conversations.findFirst({
-        where: and(
+      const [existingConversation] = await db
+        .select()
+        .from(conversations)
+        .where(and(
           eq(conversations.id, conversationId),
-          eq(conversations.userId, sessionResponse.user.id)
-        ),
-      });
+          eq(conversations.userId, user.id)
+        ))
+        .limit(1);
       
-      if (existingConversation) {
-        currentConversation = existingConversation;
-        // Update last message timestamp
-        await db
-          .update(conversations)
-          .set({ lastMessageAt: new Date() })
-          .where(eq(conversations.id, conversationId));
+      if (!existingConversation) {
+        throw new ValidationError('Conversation not found or access denied');
       }
-    }
-    
-    if (!currentConversation) {
+      
+      currentConversation = existingConversation;
+    } else {
       // Create new conversation
       const [newConversation] = await db
         .insert(conversations)
         .values({
-          userId: sessionResponse.user.id,
-          title: message.substring(0, UI_LIMITS.TITLE_MAX_LENGTH) + (message.length > UI_LIMITS.TITLE_MAX_LENGTH ? '...' : ''),
-          lastMessageAt: new Date(),
+          userId: user.id,
+          title: message.slice(0, 50) + (message.length > 50 ? '...' : ''),
+          createdAt: new Date(),
+          updatedAt: new Date(),
         })
         .returning();
       
@@ -126,25 +88,26 @@ export async function POST(request: NextRequest) {
     }
 
     // Store user message
-    const [userMessage] = await db
+    await db
       .insert(messages)
       .values({
         conversationId: currentConversation.id,
-        userId: sessionResponse.user.id,
+        userId: user.id,
         role: ROLE_USER,
         content: message,
+        createdAt: new Date(),
       })
       .returning();
 
-    // Simple mock AI response
+    // Generate a simple response (you can integrate with your AI service here)
     const responses = [
-      "I understand you're asking about " + message.substring(0, 20) + ". Here's what I think...",
-      "That's an interesting question! Let me help you with that.",
-      "Based on what you're saying, I can suggest the following approach...",
-      "Thanks for your message! Here's my response to your query.",
-      "I'm here to help! Regarding your question about " + message.substring(0, 15) + "...",
+      "I understand your question. Let me help you with that.",
+      "That's a great point! Let me provide some insights on this.",
+      "Thanks for asking! Here's what I think about that.",
+      "I see what you mean. Let me break this down for you.",
+      "That's an interesting question. Here's my perspective on it.",
     ];
-
+    
     const randomResponse = responses[Math.floor(Math.random() * responses.length)];
 
     // Store AI response
@@ -152,33 +115,19 @@ export async function POST(request: NextRequest) {
       .insert(messages)
       .values({
         conversationId: currentConversation.id,
-        userId: sessionResponse.user.id,
+        userId: user.id,
         role: ROLE_ASSISTANT,
         content: randomResponse,
-        tokenCount: randomResponse.length, // Simple token count estimate
+        createdAt: new Date(),
       })
       .returning();
 
-    // Get remaining credits from Autumn
-    let remainingCredits = 0;
-    try {
-      const usage = await autumn.check({
-        customer_id: sessionResponse.user.id,
-        feature_id: FEATURE_ID_MESSAGES,
-      });
-      remainingCredits = usage.data?.balance || 0;
-    } catch (err) {
-      console.error('Failed to get remaining credits:', err);
-    }
-
     return NextResponse.json({
       response: randomResponse,
-      remainingCredits,
-      creditsUsed: CREDITS_PER_MESSAGE,
       conversationId: currentConversation.id,
       messageId: aiMessage.id,
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Chat API error:', error);
     return handleApiError(error);
   }
@@ -187,52 +136,68 @@ export async function POST(request: NextRequest) {
 // GET endpoint to fetch conversation history
 export async function GET(request: NextRequest) {
   try {
-    const sessionResponse = await auth.api.getSession({
-      headers: request.headers,
-    });
-
-    if (!sessionResponse?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
+    const user = await getUser(request);
+    
     const { searchParams } = new URL(request.url);
     const conversationId = searchParams.get('conversationId');
-
+    
     if (conversationId) {
       // Get specific conversation with messages
-      const conversation = await db.query.conversations.findFirst({
-        where: and(
+      const [conversation] = await db
+        .select()
+        .from(conversations)
+        .where(and(
           eq(conversations.id, conversationId),
-          eq(conversations.userId, sessionResponse.user.id)
-        ),
-        with: {
-          messages: {
-            orderBy: [messages.createdAt],
-          },
-        },
-      });
-
+          eq(conversations.userId, user.id)
+        ))
+        .limit(1);
+      
       if (!conversation) {
-        return NextResponse.json({ error: 'Conversation not found' }, { status: 404 });
+        throw new ValidationError('Conversation not found or access denied');
       }
-
-      return NextResponse.json(conversation);
-    } else {
-      // Get all conversations for the user
-      const userConversations = await db.query.conversations.findMany({
-        where: eq(conversations.userId, sessionResponse.user.id),
-        orderBy: [desc(conversations.lastMessageAt)],
-        with: {
-          messages: {
-            limit: 1,
-            orderBy: [desc(messages.createdAt)],
-          },
-        },
+      
+      const conversationMessages = await db
+        .select()
+        .from(messages)
+        .where(eq(messages.conversationId, conversationId))
+        .orderBy(desc(messages.createdAt));
+      
+      return NextResponse.json({
+        ...conversation,
+        messages: conversationMessages,
       });
+    } else {
+      // Get all conversations for user with last message
+      const userConversations = await db
+        .select({
+          id: conversations.id,
+          title: conversations.title,
+          createdAt: conversations.createdAt,
+          updatedAt: conversations.updatedAt,
+        })
+        .from(conversations)
+        .where(eq(conversations.userId, user.id))
+        .orderBy(desc(conversations.updatedAt));
 
-      return NextResponse.json(userConversations);
+      // Get messages for each conversation
+      const conversationsWithMessages = await Promise.all(
+        userConversations.map(async (conv) => {
+          const conversationMessages = await db
+            .select()
+            .from(messages)
+            .where(eq(messages.conversationId, conv.id))
+            .orderBy(desc(messages.createdAt));
+          
+          return {
+            ...conv,
+            messages: conversationMessages,
+          };
+        })
+      );
+
+      return NextResponse.json(conversationsWithMessages);
     }
-  } catch (error: any) {
+  } catch (error) {
     console.error('Chat GET error:', error);
     return handleApiError(error);
   }

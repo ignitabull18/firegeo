@@ -2,25 +2,11 @@
 // This file contains all configuration values that were previously hardcoded throughout the codebase
 
 // ============================================
-// Feature IDs and Identifiers
-// ============================================
-export const FEATURE_ID_MESSAGES = 'messages';
-
-// ============================================
 // User Roles
 // ============================================
 export const ROLE_USER = 'user';
 export const ROLE_ASSISTANT = 'assistant';
 export const ROLE_SYSTEM = 'system';
-
-// ============================================
-// Credit/Usage Constants
-// ============================================
-export const CREDITS_PER_MESSAGE = 1;
-export const CREDITS_PER_BRAND_ANALYSIS = 10;
-export const FREE_TIER_MESSAGES = 100;
-export const STARTER_TIER_MESSAGES = 1000;
-export const PRO_TIER_MESSAGES = 10000;
 
 // ============================================
 // Time Constants (in milliseconds unless specified)
@@ -94,7 +80,7 @@ export const MODEL_RATE_LIMITS = {
 // URLs and Endpoints
 // ============================================
 export const DEFAULT_BASE_URL = 'http://localhost:3000';
-export const AUTUMN_API_URL = 'https://api.useautumn.com/v1';
+
 export const GOOGLE_FAVICON_API = 'https://www.google.com/s2/favicons?domain=';
 
 // API Endpoints

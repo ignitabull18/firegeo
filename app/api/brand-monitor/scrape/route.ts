@@ -1,50 +1,39 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
-import { Autumn } from 'autumn-js';
 import { scrapeCompanyInfo } from '@/lib/scrape-utils';
 import { 
   handleApiError, 
   AuthenticationError, 
-  ValidationError,
-  InsufficientCreditsError,
-  ExternalServiceError 
+  ValidationError
 } from '@/lib/api-errors';
-import { FEATURE_ID_MESSAGES } from '@/config/constants';
+import { createServerClient } from '@supabase/ssr';
 
-const autumn = new Autumn({
-  apiKey: process.env.AUTUMN_SECRET_KEY!,
-});
+async function getUser(request: NextRequest) {
+  const supabaseServer = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll()
+        },
+        setAll() {
+          // Server-side, we don't set cookies in API routes
+        },
+      },
+    }
+  );
+
+  const { data: { user } } = await supabaseServer.auth.getUser();
+  return user;
+}
 
 export async function POST(request: NextRequest) {
   try {
-    // Get the session
-    const sessionResponse = await auth.api.getSession({
-      headers: request.headers,
-    });
+    // Get the authenticated user
+    const user = await getUser(request);
 
-    if (!sessionResponse?.user) {
+    if (!user) {
       throw new AuthenticationError('Please log in to use this feature');
-    }
-
-    // Check if user has enough credits (1 credit for URL scraping)
-    try {
-      const access = await autumn.check({
-        customer_id: sessionResponse.user.id,
-        feature_id: FEATURE_ID_MESSAGES,
-      });
-      
-      if (!access.data?.allowed || (access.data?.balance && access.data.balance < 1)) {
-        throw new InsufficientCreditsError(
-          'Insufficient credits. You need at least 1 credit to analyze a URL.',
-          { required: 1, available: access.data?.balance || 0 }
-        );
-      }
-    } catch (error) {
-      if (error instanceof InsufficientCreditsError) {
-        throw error;
-      }
-      console.error('[Brand Monitor Scrape] Credit check error:', error);
-      throw new ExternalServiceError('Unable to verify credits. Please try again', 'autumn');
     }
 
     const { url, maxAge } = await request.json();
@@ -61,22 +50,26 @@ export async function POST(request: NextRequest) {
       normalizedUrl = `https://${normalizedUrl}`;
     }
 
-    // Track usage (1 credit for scraping)
     try {
-      await autumn.track({
-        customer_id: sessionResponse.user.id,
-        feature_id: FEATURE_ID_MESSAGES,
-        count: 1,
+      new URL(normalizedUrl);
+    } catch {
+      throw new ValidationError('Invalid URL format', {
+        url: 'Please provide a valid URL'
       });
-    } catch (err) {
-      console.error('[Brand Monitor Scrape] Error tracking usage:', err);
-      // Continue even if tracking fails - we don't want to block the user
     }
 
-    const company = await scrapeCompanyInfo(normalizedUrl, maxAge);
+    console.log('[Brand Monitor Scrape] Processing URL:', normalizedUrl);
 
-    return NextResponse.json({ company });
+    // Scrape the URL for company info
+    const scrapedData = await scrapeCompanyInfo(normalizedUrl, maxAge);
+
+    return NextResponse.json({
+      success: true,
+      data: scrapedData,
+      url: normalizedUrl,
+    });
   } catch (error) {
+    console.error('[Brand Monitor Scrape] API error:', error);
     return handleApiError(error);
   }
 }

@@ -1,6 +1,6 @@
 -- Application Schema
 -- This migration creates all application-specific tables
--- Better Auth tables (user, session, account, verification) are managed separately by Better Auth
+-- Supabase Auth tables (auth.users, auth.sessions, etc.) are managed separately by Supabase
 
 -- Create custom types
 DO $$ BEGIN

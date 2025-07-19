@@ -32,22 +32,16 @@ function LoginForm() {
     setLoading(true);
 
     try {
-      const response = await signIn.email({
+      await signIn.email({
         email,
         password,
       });
       
-      if (response.error) {
-        setError(response.error.message || 'Failed to login');
-        setLoading(false);
-        return;
-      }
-      
       // Use router for client-side navigation after successful login
       const returnUrl = searchParams.get('from') || '/dashboard';
       window.location.replace(returnUrl);
-    } catch (err: any) {
-      setError(err.message || 'Failed to login');
+    } catch (err) {
+      setError((err as Error).message || 'Failed to login');
       setLoading(false);
     }
   };

@@ -26,7 +26,7 @@ migrate -path migrations -database $DATABASE_URL up
 
 ## Important Notes
 
-- Better Auth manages its own tables (user, session, account, verification) automatically
+- Supabase Auth manages its own tables (users, sessions, auth schema) automatically
 - These migrations only handle application-specific tables
 - All tables use `IF NOT EXISTS` to be idempotent
-- Foreign keys reference Better Auth's user table via `user_id` text field
+- Foreign keys reference Supabase's auth.users table via `user_id` uuid field

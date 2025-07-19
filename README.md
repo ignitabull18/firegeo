@@ -28,7 +28,8 @@ cp .env.example .env.local
 
 **Required API Keys** (add to `.env.local`):
 - `DATABASE_URL` - PostgreSQL connection string (required)
-- `BETTER_AUTH_SECRET` - Generate with `openssl rand -base64 32` (required)
+- `NEXT_PUBLIC_SUPABASE_URL` - Your Supabase project URL (required)
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY` - Your Supabase anon key (required)
 
 
 ```bash
@@ -39,7 +40,7 @@ npm run setup
 The setup script will automatically:
 - Install all dependencies
 - Test database connection
-- Generate Better Auth tables
+- Set up Supabase Auth tables
 - Apply database migrations
 - Configure Autumn billing (if API key provided)
 - Get you ready to develop
@@ -75,9 +76,8 @@ nano .env.local  # or vim, code, etc.
 ### 3. Generate Authentication Secret
 
 ```bash
-# Generate a secure secret for Better Auth
-openssl rand -base64 32
-# Copy the output to BETTER_AUTH_SECRET in .env.local
+# Set up your Supabase project at https://supabase.com
+# Copy your project URL and anon key to .env.local
 ```
 
 ### 4. Initialize Database
@@ -86,8 +86,7 @@ openssl rand -base64 32
 # Push the database schema
 npm run db:push
 
-# Generate Better Auth tables
-npx @better-auth/cli generate --config better-auth.config.ts
+# Supabase Auth tables are automatically created
 
 # Apply the generated migrations
 npm run db:push
@@ -138,7 +137,7 @@ npm run lint             # Run ESLint
 | **Styling** | Tailwind CSS v4, shadcn/ui, Lucide Icons |
 | **Web Scraping** | Firecrawl |
 | **Database** | PostgreSQL, Drizzle ORM |
-| **Authentication** | Better Auth |
+| **Authentication** | Supabase Auth |
 | **Payments** | Autumn (with Stripe integration) |
 | **AI Providers** | OpenAI, Anthropic, Google Gemini, Perplexity |
 | **Email** | Resend |
@@ -149,7 +148,7 @@ npm run lint             # Run ESLint
 fire-saas-geo-latest/
 ├── app/                    # Next.js app directory
 │   ├── api/               # API routes
-│   │   ├── auth/         # Better Auth endpoints
+│   │   ├── auth/         # Auth endpoints
 │   │   ├── autumn/       # Billing endpoints (handled by Autumn)
 │   │   ├── brand-monitor/# Brand analysis APIs
 │   │   └── chat/         # AI chat endpoints
@@ -169,7 +168,7 @@ fire-saas-geo-latest/
 │   └── api-wrapper.ts    # API middleware
 ├── config/                # Configuration files
 ├── public/                # Static assets
-└── better-auth/           # Auth migrations
+└── migrations/            # Database migrations
 ```
 
 ## Manual Setup (if needed)
@@ -259,8 +258,8 @@ Visit http://localhost:3000
 DATABASE_URL=              # PostgreSQL connection string
 
 # Authentication
-BETTER_AUTH_SECRET=        # Generated with openssl
-BETTER_AUTH_URL=           # Your app URL
+NEXT_PUBLIC_SUPABASE_URL=  # Your Supabase project URL
+NEXT_PUBLIC_SUPABASE_ANON_KEY= # Your Supabase anon key
 NEXT_PUBLIC_APP_URL=       # Public app URL
 
 # Billing
@@ -316,10 +315,9 @@ npm run db:push
 ## Troubleshooting
 
 ### Authentication Error: "relation 'user' does not exist"
-If you see this error, Better Auth tables haven't been created. Run:
+If you see this error, check your Supabase configuration:
 ```bash
-# Generate Better Auth schema
-npx @better-auth/cli generate --config better-auth.config.ts
+# Ensure Supabase is properly configured
 
 # Push the schema to database
 npm run db:push
@@ -327,7 +325,7 @@ npm run db:push
 
 ### Common Issues
 
-- **Auth Issues**: Ensure `BETTER_AUTH_SECRET` is set and matches between deploys
+- **Auth Issues**: Ensure Supabase environment variables are correctly set
 - **Database Errors**: Run `npm run db:push` to sync schema
 - **Billing Issues**: Check Autumn products are created with correct IDs
 - **Email Failures**: Verify Resend domain and `EMAIL_FROM` address
@@ -341,7 +339,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 - [Firecrawl API](https://docs.firecrawl.dev)
 - [Next.js Documentation](https://nextjs.org/docs)
-- [Better Auth Docs](https://better-auth.com)
+- [Supabase Auth Docs](https://supabase.com/docs/guides/auth)
 - [Autumn Documentation](https://docs.useautumn.com)
 - [Drizzle ORM](https://orm.drizzle.team)
 - [shadcn/ui](https://ui.shadcn.com)

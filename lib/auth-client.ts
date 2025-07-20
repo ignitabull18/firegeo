@@ -21,9 +21,14 @@ let serverConfigAttempted = false;
 
 // Fetch client configuration from server when env vars not available at build time
 async function fetchClientConfig(): Promise<ClientConfig | null> {
-  if (configPromise) return configPromise;
+  console.log('🎯 fetchClientConfig() ENTERED - checking if promise exists:', !!configPromise);
   
-  console.log('🔍 Attempting to fetch client config from /api/client-config...');
+  if (configPromise) {
+    console.log('♻️ Returning existing config promise');
+    return configPromise;
+  }
+  
+  console.log('🔍 Creating new fetch request to /api/client-config...');
   
   // Use absolute URL in production to avoid relative path issues
   const baseUrl = typeof window !== 'undefined' ? (process.env.NEXT_PUBLIC_APP_URL || window.location.origin) : '';
@@ -74,7 +79,12 @@ function getSupabase() {
       serverConfigAttempted = true;
       
       // Immediately trigger the fetch and force a retry after it completes
-      fetchClientConfig().then(config => {
+      console.log('🚀 About to call fetchClientConfig()...');
+      const configPromise = fetchClientConfig();
+      console.log('🔧 fetchClientConfig() called, promise created:', !!configPromise);
+      
+      configPromise.then(config => {
+        console.log('📦 Promise resolved with config:', !!config);
         if (config) {
           console.log('✅ Server config fetched successfully, storing for use...');
           window.__supabaseConfig = config;
@@ -86,14 +96,14 @@ function getSupabase() {
           // Trigger component re-renders by dispatching a custom event
           window.dispatchEvent(new CustomEvent('supabase-config-ready'));
         } else {
-          console.error('❌ Server config fetch failed');
+          console.error('❌ Server config fetch failed - config is null');
           // Allow retry after a delay
           setTimeout(() => {
             serverConfigAttempted = false;
           }, 2000);
         }
       }).catch(error => {
-        console.error('❌ Server config fetch error:', error);
+        console.error('❌ Server config fetch promise rejected:', error);
         setTimeout(() => {
           serverConfigAttempted = false;
         }, 2000);

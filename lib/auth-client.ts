@@ -242,33 +242,25 @@ export function waitForSupabaseClient(): Promise<ReturnType<typeof createClient>
   });
 }
 
-// Hook to manage session state
+// Hook to manage session state - waits for real client
 export function useSession() {
   const [data, setData] = useState<{ user: { id: string; email?: string; name?: string }; session: object } | null>(null)
   const [isPending, setIsPending] = useState(true)
 
   useEffect(() => {
-    // Get initial session
-    const getSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (session) {
-        // Map Supabase user structure to match Better Auth structure
-        const compatibleUser = {
-          ...session.user,
-          name: session.user.user_metadata?.name || session.user.email?.split('@')[0]
-        }
-        setData({ user: compatibleUser, session })
-      } else {
-        setData(null)
-      }
-      setIsPending(false)
-    }
+    let subscription: { unsubscribe: () => void } | null = null;
 
-    getSession()
+    const initializeAuth = async () => {
+      try {
+        console.log('🔐 useSession: Waiting for real Supabase client...');
+        
+        // Wait for the real client to be ready
+        const client = await waitForSupabaseClient();
+        console.log('🔐 useSession: Got real Supabase client, initializing auth...');
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
+        // Get initial session
+        const { data: { session } } = await client.auth.getSession()
+        
         if (session) {
           // Map Supabase user structure to match Better Auth structure
           const compatibleUser = {
@@ -280,10 +272,41 @@ export function useSession() {
           setData(null)
         }
         setIsPending(false)
-      }
-    )
 
-    return () => subscription.unsubscribe()
+        // Listen for auth changes
+        const { data: { subscription: authSubscription } } = client.auth.onAuthStateChange(
+          (event, session) => {
+            console.log('🔐 Auth state change:', event, !!session);
+            if (session) {
+              // Map Supabase user structure to match Better Auth structure
+              const compatibleUser = {
+                ...session.user,
+                name: session.user.user_metadata?.name || session.user.email?.split('@')[0]
+              }
+              setData({ user: compatibleUser, session })
+            } else {
+              setData(null)
+            }
+            setIsPending(false)
+          }
+        )
+        
+        subscription = authSubscription;
+
+      } catch (error) {
+        console.error('🚨 Error initializing auth:', error)
+        setData(null)
+        setIsPending(false)
+      }
+    }
+
+    initializeAuth()
+
+    return () => {
+      if (subscription) {
+        subscription.unsubscribe()
+      }
+    }
   }, [])
 
   return { data, isPending }
@@ -323,68 +346,101 @@ export const signIn = {
   }
 }
 
-// Sign up function
+// Sign up function - waits for real client
 export const signUp = {
   email: async ({ email, password, name }: { email: string; password: string; name: string }) => {
-    // Use deployed URL for email confirmation redirects
-    const redirectTo = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/dashboard`;
-    
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: redirectTo,
-        data: {
-          name,
+    try {
+      const client = await waitForSupabaseClient();
+      console.log('🔐 signUp.email: Got real Supabase client');
+      
+      // Use deployed URL for email confirmation redirects
+      const redirectTo = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/dashboard`;
+      
+      const { data, error } = await client.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: redirectTo,
+          data: {
+            name,
+          }
         }
+      })
+
+      if (error) {
+        throw error
       }
-    })
 
-    if (error) {
-      throw error
+      return { data, error: null }
+    } catch (err) {
+      console.error('🚨 Failed to get Supabase client for signup:', err);
+      throw new Error('Authentication system not ready. Please wait a moment and try again.');
     }
-
-    return { data, error: null }
   }
 }
 
-// Password reset functions
+// Password reset functions - wait for real client
 export const resetPassword = {
   // Request password reset email
   request: async (email: string) => {
-    const redirectTo = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/reset-password`;
-    
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo,
-    })
+    try {
+      const client = await waitForSupabaseClient();
+      console.log('🔐 resetPassword.request: Got real Supabase client');
+      
+      const redirectTo = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/reset-password`;
+      
+      const { error } = await client.auth.resetPasswordForEmail(email, {
+        redirectTo,
+      })
 
-    if (error) {
-      throw error
+      if (error) {
+        throw error
+      }
+
+      return { success: true }
+    } catch (err) {
+      console.error('🚨 Failed to get Supabase client for password reset:', err);
+      throw new Error('Authentication system not ready. Please wait a moment and try again.');
     }
-
-    return { success: true }
   },
   
   // Update password with reset token
   update: async (newPassword: string) => {
-    const { error } = await supabase.auth.updateUser({
-      password: newPassword
-    })
+    try {
+      const client = await waitForSupabaseClient();
+      console.log('🔐 resetPassword.update: Got real Supabase client');
+      
+      const { error } = await client.auth.updateUser({
+        password: newPassword
+      })
 
-    if (error) {
-      throw error
+      if (error) {
+        throw error
+      }
+
+      return { success: true }
+    } catch (err) {
+      console.error('🚨 Failed to get Supabase client for password update:', err);
+      throw new Error('Authentication system not ready. Please wait a moment and try again.');
     }
-
-    return { success: true }
   }
 }
 
-// Sign out function
+// Sign out function - waits for real client
 export const signOut = async () => {
-  const { error } = await supabase.auth.signOut()
-  if (error) {
-    throw error
+  try {
+    const client = await waitForSupabaseClient();
+    console.log('🔐 signOut: Got real Supabase client');
+    
+    const { error } = await client.auth.signOut()
+    if (error) {
+      throw error
+    }
+    // Force page reload to clear any cached state
+    window.location.href = '/'
+  } catch (err) {
+    console.error('🚨 Failed to get Supabase client for signout:', err);
+    // Still redirect on error to clear any broken state
+    window.location.href = '/'
   }
-  // Force page reload to clear any cached state
-  window.location.href = '/'
 }

@@ -167,16 +167,27 @@ const createMockClient = () => ({
 
 // Check if we're in browser and add hydration logging
 if (typeof window !== 'undefined') {
-  // Wait for hydration to complete and log status
+  // Wait for hydration to complete and check config status
   setTimeout(() => {
-    console.log('🔄 Client hydration complete, checking environment variables...');
+    console.log('🔄 Client hydration complete, checking config availability...');
     
-    // Test that environment variables are actually available
-    if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
-      console.log('✅ NEXT_PUBLIC_SUPABASE_URL is available after hydration');
+    // Check if we have config from either source
+    const hasProcessEnv = !!process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const hasWindowConfig = !!(window.__supabaseConfig?.supabaseUrl);
+    
+    if (hasProcessEnv) {
+      console.log('✅ NEXT_PUBLIC_SUPABASE_URL available via process.env');
+    } else if (hasWindowConfig) {
+      console.log('✅ Supabase config available via server fetch in window.__supabaseConfig');
     } else {
-      console.error('❌ NEXT_PUBLIC_SUPABASE_URL still not available after hydration');
+      console.error('❌ No Supabase config available from any source after hydration');
     }
+    
+    console.log('📊 Config status:', {
+      processEnv: hasProcessEnv,
+      windowConfig: hasWindowConfig,
+      windowConfigKeys: window.__supabaseConfig ? Object.keys(window.__supabaseConfig) : 'undefined'
+    });
   }, 1000);
   
   // Listen for server config ready event and force re-initialization

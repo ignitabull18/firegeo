@@ -194,6 +194,8 @@ if (typeof window !== 'undefined') {
   window.addEventListener('supabase-config-ready', () => {
     console.log('🎉 Supabase config ready event received, forcing re-initialization...');
     supabaseInstance = null; // Force re-initialization
+    serverConfigAttempted = false; // Allow checking window.__supabaseConfig again
+    console.log('🔄 Reset flags for re-initialization: supabaseInstance=null, serverConfigAttempted=false');
   });
 }
 

@@ -1,17 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
-import { handleApiError, AuthenticationError } from '@/lib/api-errors';
+// import { auth } from '@/lib/auth'; // TODO: Re-enable Supabase auth
+import { handleApiError } from '@/lib/api-errors';
 
 export async function POST(request: NextRequest) {
   try {
-    // Get the session
-    const sessionResponse = await auth.api.getSession({
-      headers: request.headers,
-    });
+    // TODO: Re-enable Supabase authentication
+    // const sessionResponse = await auth.api.getSession({
+    //   headers: request.headers,
+    // });
 
-    if (!sessionResponse?.user) {
-      throw new AuthenticationError('Please log in to use this feature');
-    }
+    // if (!sessionResponse?.user) {
+    //   throw new AuthenticationError('Please log in to use this feature');
+    // }
 
     // Forward the request to the original web-search endpoint
     const body = await request.json();

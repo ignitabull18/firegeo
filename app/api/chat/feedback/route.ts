@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
+// import { auth } from '@/lib/auth'; // TODO: Re-enable Supabase auth
 import { db } from '@/lib/db';
 import { messageFeedback, messages } from '@/lib/db/schema';
 import { and, eq } from 'drizzle-orm';
@@ -7,13 +7,14 @@ import { and, eq } from 'drizzle-orm';
 // POST /api/chat/feedback - Submit feedback for a message
 export async function POST(request: NextRequest) {
   try {
-    const session = await auth.api.getSession({
-      headers: request.headers,
-    });
+    // TODO: Re-enable Supabase authentication
+    // const session = await auth.api.getSession({
+    //   headers: request.headers,
+    // });
 
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    // if (!session?.user) {
+    //   return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    // }
 
     const { messageId, helpful, rating, feedback } = await request.json();
 

@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
+// import { auth } from '@/lib/auth'; // TODO: Re-enable Supabase auth
 import { db } from '@/lib/db';
 import { brandAnalyses } from '@/lib/db/schema';
-import { eq, and } from 'drizzle-orm';
-import { handleApiError, AuthenticationError, NotFoundError } from '@/lib/api-errors';
+import { eq } from 'drizzle-orm';
+import { handleApiError, NotFoundError } from '@/lib/api-errors';
 
 // GET /api/brand-monitor/analyses/[analysisId] - Get a specific analysis
 export async function GET(
@@ -11,21 +11,20 @@ export async function GET(
   { params }: { params: Promise<{ analysisId: string }> }
 ) {
   try {
-    const sessionResponse = await auth.api.getSession({
-      headers: request.headers,
-    });
+    // TODO: Re-enable Supabase authentication
+    // const sessionResponse = await auth.api.getSession({
+    //   headers: request.headers,
+    // });
 
-    if (!sessionResponse?.user) {
-      throw new AuthenticationError('Please log in to view this analysis');
-    }
+    // if (!sessionResponse?.user) {
+    //   throw new AuthenticationError('Please log in to view this analysis');
+    // }
 
     const { analysisId } = await params;
 
     const analysis = await db.query.brandAnalyses.findFirst({
-      where: and(
-        eq(brandAnalyses.id, analysisId),
-        eq(brandAnalyses.userId, sessionResponse.user.id)
-      ),
+      where: eq(brandAnalyses.id, analysisId),
+      // TODO: Re-enable user filtering: eq(brandAnalyses.userId, sessionResponse.user.id)
     });
 
     if (!analysis) {
@@ -44,21 +43,20 @@ export async function DELETE(
   { params }: { params: Promise<{ analysisId: string }> }
 ) {
   try {
-    const sessionResponse = await auth.api.getSession({
-      headers: request.headers,
-    });
+    // TODO: Re-enable Supabase authentication
+    // const sessionResponse = await auth.api.getSession({
+    //   headers: request.headers,
+    // });
 
-    if (!sessionResponse?.user) {
-      throw new AuthenticationError('Please log in to delete this analysis');
-    }
+    // if (!sessionResponse?.user) {
+    //   throw new AuthenticationError('Please log in to delete this analysis');
+    // }
 
     const { analysisId } = await params;
 
     const result = await db.delete(brandAnalyses)
-      .where(and(
-        eq(brandAnalyses.id, analysisId),
-        eq(brandAnalyses.userId, sessionResponse.user.id)
-      ))
+      .where(eq(brandAnalyses.id, analysisId))
+      // TODO: Re-enable user filtering: eq(brandAnalyses.userId, sessionResponse.user.id)
       .returning();
 
     if (result.length === 0) {

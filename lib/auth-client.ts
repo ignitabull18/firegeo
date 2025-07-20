@@ -279,12 +279,24 @@ export function useSession() {
 // Sign in function
 export const signIn = {
   email: async ({ email, password }: { email: string; password: string }) => {
+    console.log('🔐 signIn.email called with:', { email, passwordLength: password.length });
+    console.log('🔍 Current supabase client type:', typeof supabase);
+    console.log('🔍 Supabase client has auth:', !!supabase.auth);
+    console.log('🔍 Auth client is real Supabase:', supabase.auth.signInWithPassword.toString().includes('signInWithPassword'));
+    
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     })
+    
+    console.log('🔐 signInWithPassword result:', { 
+      hasData: !!data, 
+      hasUser: !!data?.user, 
+      error: error?.message || 'none' 
+    });
 
     if (error) {
+      console.error('🔐 Login error:', error);
       throw error
     }
 

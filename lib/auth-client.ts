@@ -37,15 +37,45 @@ function getSupabase() {
   return supabaseInstance;
 }
 
+// Create a mock client structure for hydration
+const createMockClient = () => ({
+  auth: {
+    onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
+    getSession: () => Promise.resolve({ data: { session: null }, error: null }),
+    getUser: () => Promise.resolve({ data: { user: null }, error: null }),
+    signOut: () => Promise.resolve({ error: null }),
+    signInWithPassword: () => Promise.resolve({ data: null, error: null }),
+    signUp: () => Promise.resolve({ data: null, error: null }),
+    resetPasswordForEmail: () => Promise.resolve({ data: null, error: null }),
+    updateUser: () => Promise.resolve({ data: null, error: null })
+  },
+  from: () => ({
+    select: () => ({
+      eq: () => ({
+        single: () => Promise.resolve({ data: null, error: null })
+      })
+    }),
+    insert: () => Promise.resolve({ data: null, error: null }),
+    update: () => Promise.resolve({ data: null, error: null }),
+    delete: () => Promise.resolve({ data: null, error: null })
+  })
+});
+
 // Export getter to ensure lazy initialization
 export const supabase = new Proxy({} as ReturnType<typeof createClient>, {
   get(target, prop) {
-    const client = getSupabase();
-    if (!client) {
-      // Return a no-op function during hydration to prevent errors
-      return () => Promise.resolve({ data: null, error: null });
+    try {
+      const client = getSupabase();
+      if (!client) {
+        throw new Error('Client not ready');
+      }
+      return client[prop as keyof ReturnType<typeof createClient>];
+    } catch {
+      // During hydration, return mock structure
+      console.log('Using mock Supabase client during hydration for prop:', prop);
+      const mockClient = createMockClient();
+      return mockClient[prop as keyof typeof mockClient];
     }
-    return client[prop as keyof ReturnType<typeof createClient>];
   }
 });
 

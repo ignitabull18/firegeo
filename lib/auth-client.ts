@@ -60,34 +60,51 @@ function getSupabase() {
     let supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     let supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
     
+    // Check for previously fetched config first
+    if (typeof window !== 'undefined' && window.__supabaseConfig && (!supabaseUrl || !supabaseAnonKey)) {
+      const config = window.__supabaseConfig;
+      console.log('✅ Using server-fetched configuration');
+      supabaseUrl = config.supabaseUrl;
+      supabaseAnonKey = config.supabaseAnonKey;
+    }
+    
     // If environment variables aren't embedded in client bundle, try server endpoint
     if (typeof window !== 'undefined' && (!supabaseUrl || !supabaseAnonKey) && !serverConfigAttempted) {
-      console.warn('Environment variables not embedded in client bundle, attempting server fetch...');
+      console.warn('🔍 Environment variables not embedded in client bundle, attempting server fetch...');
       serverConfigAttempted = true;
       
-      // Trigger async fetch but don't wait for it - store result for next call
+      // Immediately trigger the fetch and force a retry after it completes
       fetchClientConfig().then(config => {
         if (config) {
-          console.log('Server config fetched, storing for next initialization...');
+          console.log('✅ Server config fetched successfully, storing for use...');
           window.__supabaseConfig = config;
-          supabaseInstance = null; // Reset to trigger re-initialization with new config
+          
+          // Force immediate re-initialization with server config
+          supabaseInstance = null;
+          serverConfigAttempted = false; // Allow retry with new config
+          
+          // Trigger component re-renders by dispatching a custom event
+          window.dispatchEvent(new CustomEvent('supabase-config-ready'));
+        } else {
+          console.error('❌ Server config fetch failed');
+          // Allow retry after a delay
+          setTimeout(() => {
+            serverConfigAttempted = false;
+          }, 2000);
         }
+      }).catch(error => {
+        console.error('❌ Server config fetch error:', error);
+        setTimeout(() => {
+          serverConfigAttempted = false;
+        }, 2000);
       });
       
       return null; // Return null now, will work on next call after fetch completes
     }
     
-    // Check for previously fetched config
-    if (typeof window !== 'undefined' && window.__supabaseConfig && (!supabaseUrl || !supabaseAnonKey)) {
-      const config = window.__supabaseConfig;
-      console.log('Using server-fetched configuration');
-      supabaseUrl = config.supabaseUrl;
-      supabaseAnonKey = config.supabaseAnonKey;
-    }
-    
     // During client-side hydration, if still missing
     if (typeof window !== 'undefined' && (!supabaseUrl || !supabaseAnonKey)) {
-      console.warn('Supabase environment variables not yet available during client hydration. Waiting...');
+      console.warn('⏳ Supabase environment variables not yet available during client hydration. Waiting...');
       setTimeout(() => {
         supabaseInstance = null; // Reset to retry
       }, 100);
@@ -95,10 +112,11 @@ function getSupabase() {
     }
     
     if (!supabaseUrl || !supabaseAnonKey) {
+      console.error('❌ Supabase configuration missing after all attempts');
       throw new Error('Supabase configuration missing');
     }
     
-    console.log('Initializing Supabase with URL:', supabaseUrl.substring(0, 30) + '...');
+    console.log('🚀 Initializing Supabase with URL:', supabaseUrl.substring(0, 30) + '...');
     supabaseInstance = createClient(supabaseUrl, supabaseAnonKey);
   }
   return supabaseInstance;
@@ -132,7 +150,7 @@ const createMockClient = () => ({
 if (typeof window !== 'undefined') {
   // Wait for hydration to complete and log status
   setTimeout(() => {
-    console.log('Client hydration complete, checking environment variables...');
+    console.log('🔄 Client hydration complete, checking environment variables...');
     
     // Test that environment variables are actually available
     if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
@@ -141,6 +159,12 @@ if (typeof window !== 'undefined') {
       console.error('❌ NEXT_PUBLIC_SUPABASE_URL still not available after hydration');
     }
   }, 1000);
+  
+  // Listen for server config ready event and force re-initialization
+  window.addEventListener('supabase-config-ready', () => {
+    console.log('🎉 Supabase config ready event received, forcing re-initialization...');
+    supabaseInstance = null; // Force re-initialization
+  });
 }
 
 // Create a simple getter that returns the client or mock

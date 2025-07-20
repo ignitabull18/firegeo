@@ -141,29 +141,7 @@ function getSupabase() {
   return supabaseInstance;
 }
 
-// Create a mock client structure for hydration
-const createMockClient = () => ({
-  auth: {
-    onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
-    getSession: () => Promise.resolve({ data: { session: null }, error: null }),
-    getUser: () => Promise.resolve({ data: { user: null }, error: null }),
-    signOut: () => Promise.resolve({ error: null }),
-    signInWithPassword: () => Promise.resolve({ data: null, error: null }),
-    signUp: () => Promise.resolve({ data: null, error: null }),
-    resetPasswordForEmail: () => Promise.resolve({ data: null, error: null }),
-    updateUser: () => Promise.resolve({ data: null, error: null })
-  },
-  from: () => ({
-    select: () => ({
-      eq: () => ({
-        single: () => Promise.resolve({ data: null, error: null })
-      })
-    }),
-    insert: () => Promise.resolve({ data: null, error: null }),
-    update: () => Promise.resolve({ data: null, error: null }),
-    delete: () => Promise.resolve({ data: null, error: null })
-  })
-});
+// No more mock client - we'll wait for the real one or throw errors
 
 // Check if we're in browser and add hydration logging
 if (typeof window !== 'undefined') {
@@ -202,56 +180,67 @@ if (typeof window !== 'undefined') {
     const realClient = getSupabase();
     if (realClient) {
       console.log('✅ Real Supabase client created successfully after server config fetch!');
-      hasRealClientBeenCreated = true; // Mark that we now have a real client
     } else {
       console.error('❌ Failed to create real Supabase client even after server config fetch');
     }
   });
 }
 
-// Track if we've ever had a real client to avoid falling back to mock
-let hasRealClientBeenCreated = false;
-
-// Create a simple getter that returns the client or mock
+// Simple getter - returns real client or null (no more mocks!)
 function getSupabaseClient() {
   const client = getSupabase();
   
   if (client) {
-    if (!hasRealClientBeenCreated) {
-      console.log('🎉 REAL Supabase client is now available - no more mocks!');
-      hasRealClientBeenCreated = true;
-    }
+    console.log('🎉 Using REAL Supabase client');
     return client;
   }
   
-  // Only use mock if we've never had a real client
-  if (!hasRealClientBeenCreated) {
-    console.log('Using mock Supabase client during initialization...');
-    return createMockClient() as unknown as ReturnType<typeof createClient>;
-  }
+  console.log('⏳ Real Supabase client not ready yet, waiting...');
   
-  // If we've had a real client before but it's null now, something is wrong
-  console.error('🚨 CRITICAL: Real client was available but is now null! Forcing re-creation...');
+  // Force a retry after a short delay
+  setTimeout(() => {
+    supabaseInstance = null; // Reset to retry
+  }, 100);
   
-  // Try to recreate the real client
-  supabaseInstance = null;
-  const newClient = getSupabase();
-  if (newClient) {
-    console.log('✅ Successfully recreated real Supabase client');
-    return newClient;
-  }
-  
-  console.error('❌ Failed to recreate real client, falling back to mock');
-  return createMockClient() as unknown as ReturnType<typeof createClient>;
+  return null;
 }
 
-// Export the client - much simpler approach
+// Export the client - Wait for real client or throw error (NO MORE MOCKS!)
 export const supabase = new Proxy({} as ReturnType<typeof createClient>, {
   get(target, prop) {
     const client = getSupabaseClient();
+    if (!client) {
+      throw new Error(`🚨 Supabase client not ready yet! Tried to access: ${String(prop)} - Wait for initialization to complete.`);
+    }
     return client[prop as keyof typeof client];
   }
 });
+
+// Also provide a direct way to get the client once it's ready
+export function waitForSupabaseClient(): Promise<ReturnType<typeof createClient>> {
+  return new Promise((resolve, reject) => {
+    const client = getSupabaseClient();
+    if (client) {
+      resolve(client);
+      return;
+    }
+    
+    // Wait for the config ready event
+    const timeout = setTimeout(() => {
+      reject(new Error('Timeout waiting for Supabase client'));
+    }, 10000);
+    
+    window.addEventListener('supabase-config-ready', () => {
+      clearTimeout(timeout);
+      const client = getSupabaseClient();
+      if (client) {
+        resolve(client);
+      } else {
+        reject(new Error('Supabase client still not ready after config event'));
+      }
+    }, { once: true });
+  });
+}
 
 // Hook to manage session state
 export function useSession() {
@@ -300,31 +289,37 @@ export function useSession() {
   return { data, isPending }
 }
 
-// Sign in function
+// Sign in function - now waits for real client
 export const signIn = {
   email: async ({ email, password }: { email: string; password: string }) => {
     console.log('🔐 signIn.email called with:', { email, passwordLength: password.length });
-    console.log('🔍 Current supabase client type:', typeof supabase);
-    console.log('🔍 Supabase client has auth:', !!supabase.auth);
-    console.log('🔍 Auth client is real Supabase:', supabase.auth.signInWithPassword.toString().includes('signInWithPassword'));
     
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
-    
-    console.log('🔐 signInWithPassword result:', { 
-      hasData: !!data, 
-      hasUser: !!data?.user, 
-      error: error?.message || 'none' 
-    });
+    try {
+      // Wait for real Supabase client to be ready
+      const client = await waitForSupabaseClient();
+      console.log('🔍 Got real Supabase client for login!');
+      
+      const { data, error } = await client.auth.signInWithPassword({
+        email,
+        password,
+      })
+      
+      console.log('🔐 signInWithPassword result:', { 
+        hasData: !!data, 
+        hasUser: !!data?.user, 
+        error: error?.message || 'none' 
+      });
 
-    if (error) {
-      console.error('🔐 Login error:', error);
-      throw error
+      if (error) {
+        console.error('🔐 Login error:', error);
+        throw error
+      }
+      
+      return { data, error: null }
+    } catch (err) {
+      console.error('🚨 Failed to get Supabase client for login:', err);
+      throw new Error('Authentication system not ready. Please wait a moment and try again.');
     }
-
-    return { data, error: null }
   }
 }
 

@@ -1,10 +1,32 @@
 import { createClient } from '@supabase/supabase-js'
 import { useEffect, useState } from 'react'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+// Lazy initialization to prevent build-time errors
+let supabaseInstance: ReturnType<typeof createClient> | null = null;
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+function getSupabase() {
+  if (!supabaseInstance) {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    
+    if (!supabaseUrl) {
+      throw new Error('supabaseUrl is required.');
+    }
+    if (!supabaseAnonKey) {
+      throw new Error('supabaseAnonKey is required.');
+    }
+    
+    supabaseInstance = createClient(supabaseUrl, supabaseAnonKey);
+  }
+  return supabaseInstance;
+}
+
+// Export getter to ensure lazy initialization
+export const supabase = new Proxy({} as ReturnType<typeof createClient>, {
+  get(target, prop) {
+    return getSupabase()[prop as keyof ReturnType<typeof createClient>];
+  }
+});
 
 // Hook to manage session state
 export function useSession() {
@@ -72,10 +94,14 @@ export const signIn = {
 // Sign up function
 export const signUp = {
   email: async ({ email, password, name }: { email: string; password: string; name: string }) => {
+    // Use deployed URL for email confirmation redirects
+    const redirectTo = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/dashboard`;
+    
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
+        emailRedirectTo: redirectTo,
         data: {
           name,
         }
@@ -87,6 +113,37 @@ export const signUp = {
     }
 
     return { data, error: null }
+  }
+}
+
+// Password reset functions
+export const resetPassword = {
+  // Request password reset email
+  request: async (email: string) => {
+    const redirectTo = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/reset-password`;
+    
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo,
+    })
+
+    if (error) {
+      throw error
+    }
+
+    return { success: true }
+  },
+  
+  // Update password with reset token
+  update: async (newPassword: string) => {
+    const { error } = await supabase.auth.updateUser({
+      password: newPassword
+    })
+
+    if (error) {
+      throw error
+    }
+
+    return { success: true }
   }
 }
 

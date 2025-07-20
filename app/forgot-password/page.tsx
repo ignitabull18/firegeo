@@ -1,10 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
-import { authClient } from '@/lib/auth-client';
+import { resetPassword } from '@/lib/auth-client';
 import { ArrowLeft } from 'lucide-react';
 
 export default function ForgotPasswordPage() {
@@ -12,7 +11,6 @@ export default function ForgotPasswordPage() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
-  const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -20,13 +18,10 @@ export default function ForgotPasswordPage() {
     setLoading(true);
 
     try {
-      await authClient.forgetPassword({
-        email,
-        redirectTo: '/reset-password',
-      });
+      await resetPassword.request(email);
       setSuccess(true);
-    } catch (err: any) {
-      setError(err.message || 'Failed to send reset email');
+    } catch (err: unknown) {
+      setError((err as Error).message || 'Failed to send reset email');
     } finally {
       setLoading(false);
     }

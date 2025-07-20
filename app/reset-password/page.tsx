@@ -4,7 +4,7 @@ import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
-import { authClient } from '@/lib/auth-client';
+import { resetPassword } from '@/lib/auth-client';
 import { ArrowLeft, CheckCircle } from 'lucide-react';
 
 function ResetPasswordForm() {
@@ -39,15 +39,12 @@ function ResetPasswordForm() {
     setLoading(true);
 
     try {
-      await authClient.resetPassword({
-        newPassword: password,
-        token: token!,
-      });
+      await resetPassword.update(password);
       
       // Redirect to login with success message
       router.push('/login?reset=success');
-    } catch (err: any) {
-      setError(err.message || 'Failed to reset password');
+    } catch (err: unknown) {
+      setError((err as Error).message || 'Failed to reset password');
     } finally {
       setLoading(false);
     }

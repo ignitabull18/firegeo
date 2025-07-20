@@ -23,14 +23,27 @@ let serverConfigAttempted = false;
 async function fetchClientConfig(): Promise<ClientConfig | null> {
   if (configPromise) return configPromise;
   
+  console.log('🔍 Attempting to fetch client config from /api/client-config...');
+  
   configPromise = fetch('/api/client-config')
-    .then(res => res.json())
+    .then(res => {
+      console.log('📡 Fetch response received:', res.status, res.statusText);
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+      return res.json();
+    })
     .then((config: ClientConfig) => {
-      console.log('✅ Successfully fetched Supabase config from server');
+      console.log('✅ Successfully fetched Supabase config from server:', {
+        hasSupabaseUrl: !!config.supabaseUrl,
+        hasSupabaseKey: !!config.supabaseAnonKey,
+        appUrl: config.appUrl
+      });
       return config;
     })
     .catch(error => {
-      console.error('Failed to fetch client config:', error);
+      console.error('❌ Failed to fetch client config:', error);
+      console.error('Full error details:', error.message, error.stack);
       return null;
     });
   

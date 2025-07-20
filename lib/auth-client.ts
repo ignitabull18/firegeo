@@ -202,22 +202,46 @@ if (typeof window !== 'undefined') {
     const realClient = getSupabase();
     if (realClient) {
       console.log('✅ Real Supabase client created successfully after server config fetch!');
+      hasRealClientBeenCreated = true; // Mark that we now have a real client
     } else {
       console.error('❌ Failed to create real Supabase client even after server config fetch');
     }
   });
 }
 
+// Track if we've ever had a real client to avoid falling back to mock
+let hasRealClientBeenCreated = false;
+
 // Create a simple getter that returns the client or mock
 function getSupabaseClient() {
   const client = getSupabase();
   
   if (client) {
+    if (!hasRealClientBeenCreated) {
+      console.log('🎉 REAL Supabase client is now available - no more mocks!');
+      hasRealClientBeenCreated = true;
+    }
     return client;
   }
   
-  // Return mock during hydration
-  console.log('Using mock Supabase client during initialization...');
+  // Only use mock if we've never had a real client
+  if (!hasRealClientBeenCreated) {
+    console.log('Using mock Supabase client during initialization...');
+    return createMockClient() as unknown as ReturnType<typeof createClient>;
+  }
+  
+  // If we've had a real client before but it's null now, something is wrong
+  console.error('🚨 CRITICAL: Real client was available but is now null! Forcing re-creation...');
+  
+  // Try to recreate the real client
+  supabaseInstance = null;
+  const newClient = getSupabase();
+  if (newClient) {
+    console.log('✅ Successfully recreated real Supabase client');
+    return newClient;
+  }
+  
+  console.error('❌ Failed to recreate real client, falling back to mock');
   return createMockClient() as unknown as ReturnType<typeof createClient>;
 }
 

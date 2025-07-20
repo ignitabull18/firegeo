@@ -196,6 +196,15 @@ if (typeof window !== 'undefined') {
     supabaseInstance = null; // Force re-initialization
     serverConfigAttempted = false; // Allow checking window.__supabaseConfig again
     console.log('🔄 Reset flags for re-initialization: supabaseInstance=null, serverConfigAttempted=false');
+    
+    // Immediately try to create the real Supabase client
+    console.log('🚀 Proactively creating real Supabase client...');
+    const realClient = getSupabase();
+    if (realClient) {
+      console.log('✅ Real Supabase client created successfully after server config fetch!');
+    } else {
+      console.error('❌ Failed to create real Supabase client even after server config fetch');
+    }
   });
 }
 

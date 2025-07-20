@@ -4,9 +4,20 @@ import { Company } from './types';
 import FirecrawlApp from '@mendable/firecrawl-js';
 import { getConfiguredProviders, getProviderModel } from './provider-config';
 
-const firecrawl = new FirecrawlApp({
-  apiKey: process.env.FIRECRAWL_API_KEY,
-});
+// Lazy initialization to prevent build-time errors
+let firecrawlInstance: FirecrawlApp | null = null;
+
+function getFirecrawl(): FirecrawlApp {
+  if (!firecrawlInstance) {
+    if (!process.env.FIRECRAWL_API_KEY) {
+      throw new Error('FIRECRAWL_API_KEY environment variable is required');
+    }
+    firecrawlInstance = new FirecrawlApp({
+      apiKey: process.env.FIRECRAWL_API_KEY,
+    });
+  }
+  return firecrawlInstance;
+}
 
 const CompanyInfoSchema = z.object({
   name: z.string(),
@@ -30,7 +41,7 @@ export async function scrapeCompanyInfo(url: string, maxAge?: number): Promise<C
     
     // For demo purposes, we'll use a simplified approach
     // In production, you'd want to use a proper scraping service like Firecrawl
-    const response = await firecrawl.scrapeUrl(normalizedUrl, {
+    const response = await getFirecrawl().scrapeUrl(normalizedUrl, {
       formats: ['markdown'],
       maxAge: cacheAge,
     });

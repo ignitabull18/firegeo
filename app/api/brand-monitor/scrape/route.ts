@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: scrapedData,
+      company: scrapedData,
       url: normalizedUrl,
     });
   } catch (error) {

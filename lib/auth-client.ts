@@ -61,6 +61,27 @@ const createMockClient = () => ({
   })
 });
 
+// Track hydration state
+let hydrationComplete = false;
+let retryCount = 0;
+const MAX_RETRIES = 5;
+
+// Check if we're in browser and hydration is complete
+if (typeof window !== 'undefined') {
+  // Wait for hydration to complete
+  setTimeout(() => {
+    hydrationComplete = true;
+    console.log('Client hydration complete, real Supabase client now available');
+    
+    // Test that environment variables are actually available
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      console.log('✅ NEXT_PUBLIC_SUPABASE_URL is available after hydration');
+    } else {
+      console.error('❌ NEXT_PUBLIC_SUPABASE_URL still not available after hydration');
+    }
+  }, 1000);
+}
+
 // Export getter to ensure lazy initialization
 export const supabase = new Proxy({} as ReturnType<typeof createClient>, {
   get(target, prop) {
@@ -69,10 +90,29 @@ export const supabase = new Proxy({} as ReturnType<typeof createClient>, {
       if (!client) {
         throw new Error('Client not ready');
       }
+      // Reset retry count on successful initialization
+      retryCount = 0;
       return client[prop as keyof ReturnType<typeof createClient>];
     } catch {
-      // During hydration, return mock structure
-      console.log('Using mock Supabase client during hydration for prop:', prop);
+      // If hydration is complete or we're on server, try harder to get real client
+      if (hydrationComplete || typeof window === 'undefined') {
+        retryCount++;
+        if (retryCount <= MAX_RETRIES) {
+          console.log(`Retrying Supabase client initialization (${retryCount}/${MAX_RETRIES})`);
+          try {
+            const client = getSupabase();
+            if (client) {
+              retryCount = 0;
+              return client[prop as keyof ReturnType<typeof createClient>];
+            }
+          } catch {
+            // Continue to mock if still failing
+          }
+        }
+      }
+      
+      // During hydration or after max retries, return mock structure
+      console.log('Using mock Supabase client for prop:', prop);
       const mockClient = createMockClient();
       return mockClient[prop as keyof typeof mockClient];
     }

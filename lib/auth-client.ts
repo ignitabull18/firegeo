@@ -25,7 +25,12 @@ async function fetchClientConfig(): Promise<ClientConfig | null> {
   
   console.log('🔍 Attempting to fetch client config from /api/client-config...');
   
-  configPromise = fetch('/api/client-config')
+  // Use absolute URL in production to avoid relative path issues
+  const baseUrl = typeof window !== 'undefined' ? (process.env.NEXT_PUBLIC_APP_URL || window.location.origin) : '';
+  const configUrl = `${baseUrl}/api/client-config`;
+  console.log('Fetching from absolute URL:', configUrl);
+  
+  configPromise = fetch(configUrl)
     .then(res => {
       console.log('📡 Fetch response received:', res.status, res.statusText);
       if (!res.ok) {
@@ -50,56 +55,44 @@ async function fetchClientConfig(): Promise<ClientConfig | null> {
   return configPromise;
 }
 
-function getSupabase() {
+async function getSupabase() {
   if (!supabaseInstance) {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    let supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    let supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
     
     // If environment variables aren't embedded in client bundle, try server endpoint
     if (typeof window !== 'undefined' && (!supabaseUrl || !supabaseAnonKey) && !serverConfigAttempted) {
       console.warn('Environment variables not embedded in client bundle, attempting server fetch...');
       serverConfigAttempted = true;
       
-      // Async fetch - will resolve in subsequent calls
-      fetchClientConfig().then(config => {
-                 if (config && config.supabaseUrl && config.supabaseAnonKey) {
-           // Force re-initialization with server config
-           supabaseInstance = null;
-           // Store config temporarily for immediate use
-           window.__supabaseConfig = config;
-         }
-      });
-      
-      return null; // Return null for now, will retry
+      const config = await fetchClientConfig();
+      if (config) {
+        supabaseUrl = config.supabaseUrl;
+        supabaseAnonKey = config.supabaseAnonKey;
+      } else {
+        return null; // Fetch failed, will retry later
+      }
     }
     
-    // Check for server-fetched config
+    // Check for previously fetched config
     if (typeof window !== 'undefined' && window.__supabaseConfig && (!supabaseUrl || !supabaseAnonKey)) {
       const config = window.__supabaseConfig;
-      console.log('Using server-fetched configuration');
-      supabaseInstance = createClient(config.supabaseUrl, config.supabaseAnonKey);
-      return supabaseInstance;
+      console.log('Using previously fetched server configuration');
+      supabaseUrl = config.supabaseUrl;
+      supabaseAnonKey = config.supabaseAnonKey;
     }
     
-    // During client-side hydration, environment variables might not be immediately available
+    // During client-side hydration, if still missing
     if (typeof window !== 'undefined' && (!supabaseUrl || !supabaseAnonKey)) {
       console.warn('Supabase environment variables not yet available during client hydration. Waiting...');
-      
-      // Try again after a small delay to allow hydration to complete
       setTimeout(() => {
-        supabaseInstance = null; // Reset to retry initialization
+        supabaseInstance = null; // Reset to retry
       }, 100);
-      
       return null;
     }
     
-    if (!supabaseUrl) {
-      console.error('Missing NEXT_PUBLIC_SUPABASE_URL environment variable');
-      throw new Error('Supabase configuration error: NEXT_PUBLIC_SUPABASE_URL is not set. Please check your environment variables in Coolify.');
-    }
-    if (!supabaseAnonKey) {
-      console.error('Missing NEXT_PUBLIC_SUPABASE_ANON_KEY environment variable');
-      throw new Error('Supabase configuration error: NEXT_PUBLIC_SUPABASE_ANON_KEY is not set. Please check your environment variables in Coolify.');
+    if (!supabaseUrl || !supabaseAnonKey) {
+      throw new Error('Supabase configuration missing');
     }
     
     console.log('Initializing Supabase with URL:', supabaseUrl.substring(0, 30) + '...');
@@ -134,8 +127,6 @@ const createMockClient = () => ({
 
 // Track hydration state
 let hydrationComplete = false;
-let retryCount = 0;
-const MAX_RETRIES = 5;
 
 // Check if we're in browser and hydration is complete
 if (typeof window !== 'undefined') {
@@ -153,40 +144,37 @@ if (typeof window !== 'undefined') {
   }, 1000);
 }
 
-// Export getter to ensure lazy initialization
+// Export proxy that handles async methods
 export const supabase = new Proxy({} as ReturnType<typeof createClient>, {
   get(target, prop) {
-    try {
-      const client = getSupabase();
-      if (!client) {
-        throw new Error('Client not ready');
-      }
-      // Reset retry count on successful initialization
-      retryCount = 0;
-      return client[prop as keyof ReturnType<typeof createClient>];
-    } catch {
-      // If hydration is complete or we're on server, try harder to get real client
-      if (hydrationComplete || typeof window === 'undefined') {
-        retryCount++;
-        if (retryCount <= MAX_RETRIES) {
-          console.log(`Retrying Supabase client initialization (${retryCount}/${MAX_RETRIES})`);
-          try {
-            const client = getSupabase();
-            if (client) {
-              retryCount = 0;
-              return client[prop as keyof ReturnType<typeof createClient>];
-            }
-          } catch {
-            // Continue to mock if still failing
-          }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Complex Supabase type inference in proxy
+    return async (...args: unknown[]) => {
+      try {
+        const client = await getSupabase();
+        if (!client) {
+          throw new Error('Client not ready');
         }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Method type is hard to specify generically
+        const method = client[prop as keyof typeof client] as any;
+        if (typeof method === 'function') {
+          return method.apply(client, args);
+        }
+        return method;
+      } catch (error) {
+        if (hydrationComplete) {
+          throw error;
+        }
+        // Mock during hydration
+        console.log('Using mock for async method during hydration:', prop);
+        const mockClient = createMockClient();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Method type is hard to specify generically
+        const method = mockClient[prop as keyof typeof mockClient] as any;
+        if (typeof method === 'function') {
+          return method.apply(mockClient, args);
+        }
+        return method;
       }
-      
-      // During hydration or after max retries, return mock structure
-      console.log('Using mock Supabase client for prop:', prop);
-      const mockClient = createMockClient();
-      return mockClient[prop as keyof typeof mockClient];
-    }
+    };
   }
 });
 

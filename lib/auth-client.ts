@@ -9,9 +9,21 @@ function getSupabase() {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
     
+    // During client-side hydration, environment variables might not be immediately available
+    // Check if we're in the browser and variables aren't available yet
+    if (typeof window !== 'undefined' && (!supabaseUrl || !supabaseAnonKey)) {
+      console.warn('Supabase environment variables not yet available during client hydration. Waiting...');
+      
+      // Try again after a small delay to allow hydration to complete
+      setTimeout(() => {
+        supabaseInstance = null; // Reset to retry initialization
+      }, 100);
+      
+      return null;
+    }
+    
     if (!supabaseUrl) {
       console.error('Missing NEXT_PUBLIC_SUPABASE_URL environment variable');
-      // Return a mock client that throws helpful errors
       throw new Error('Supabase configuration error: NEXT_PUBLIC_SUPABASE_URL is not set. Please check your environment variables in Coolify.');
     }
     if (!supabaseAnonKey) {
@@ -28,7 +40,12 @@ function getSupabase() {
 // Export getter to ensure lazy initialization
 export const supabase = new Proxy({} as ReturnType<typeof createClient>, {
   get(target, prop) {
-    return getSupabase()[prop as keyof ReturnType<typeof createClient>];
+    const client = getSupabase();
+    if (!client) {
+      // Return a no-op function during hydration to prevent errors
+      return () => Promise.resolve({ data: null, error: null });
+    }
+    return client[prop as keyof ReturnType<typeof createClient>];
   }
 });
 

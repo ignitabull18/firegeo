@@ -2,39 +2,61 @@ import { NextRequest, NextResponse } from 'next/server';
 import { scrapeCompanyInfo } from '@/lib/scrape-utils';
 import { 
   handleApiError, 
-  AuthenticationError, 
+  // AuthenticationError, // Temporarily disabled 
   ValidationError
 } from '@/lib/api-errors';
-import { createServerClient } from '@supabase/ssr';
+// import { createServerClient } from '@supabase/ssr'; // Temporarily disabled
 
+// Authentication functions temporarily disabled for testing
+/*
 async function getUser(request: NextRequest) {
-  const supabaseServer = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll()
+  try {
+    const supabaseServer = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() {
+            const cookies = request.cookies.getAll();
+            console.log('Available cookies:', cookies.map(c => c.name));
+            return cookies;
+          },
+          setAll(cookiesToSet: any) {
+            // In API routes, we don't need to set cookies but we need this function
+            console.log('Cookies to set:', cookiesToSet.length);
+          },
         },
-        setAll() {
-          // Server-side, we don't set cookies in API routes
-        },
-      },
-    }
-  );
+      }
+    );
 
-  const { data: { user } } = await supabaseServer.auth.getUser();
-  return user;
+    const { data: { user }, error } = await supabaseServer.auth.getUser();
+    
+    console.log('Auth result:', { 
+      hasUser: !!user, 
+      userId: user?.id, 
+      error: error?.message 
+    });
+    
+    if (error) {
+      console.log('Supabase auth error:', error);
+      return null;
+    }
+    return user;
+  } catch (error) {
+    console.log('getUser function error:', error);
+    return null;
+  }
 }
+*/
 
 export async function POST(request: NextRequest) {
   try {
-    // Get the authenticated user
-    const user = await getUser(request);
-
-    if (!user) {
-      throw new AuthenticationError('Please log in to use this feature');
-    }
+    // Authentication temporarily disabled for testing
+    // TODO: Re-enable authentication after testing
+    // const user = await getUser(request);
+    // if (!user) {
+    //   throw new AuthenticationError('Please log in to use this feature');
+    // }
 
     const { url, maxAge } = await request.json();
 

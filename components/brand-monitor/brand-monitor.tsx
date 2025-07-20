@@ -176,11 +176,7 @@ export function BrandMonitor({
       return;
     }
 
-    // Check if user has enough credits for initial scrape (1 credit)
-    if (creditsAvailable < 1) {
-      dispatch({ type: 'SET_ERROR', payload: 'Insufficient credits. You need at least 1 credit to analyze a URL.' });
-      return;
-    }
+    // Credit check removed - this is now an internal tool without billing
 
     console.log('Starting scrape for URL:', url);
     dispatch({ type: 'SET_LOADING', payload: true });

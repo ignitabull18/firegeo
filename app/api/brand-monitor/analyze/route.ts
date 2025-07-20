@@ -9,26 +9,44 @@ import {
 import { createServerClient } from '@supabase/ssr';
 
 async function getUser(request: NextRequest) {
-  const supabaseServer = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll()
+  try {
+    const supabaseServer = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() {
+            const cookies = request.cookies.getAll();
+            console.log('Available cookies:', cookies.map(c => c.name));
+            return cookies;
+          },
+          setAll(cookiesToSet) {
+            // In API routes, we don't need to set cookies but we need this function
+            console.log('Cookies to set:', cookiesToSet.length);
+          },
         },
-        setAll() {
-          // Server-side, we don't set cookies in API routes
-        },
-      },
-    }
-  );
+      }
+    );
 
-  const { data: { user } } = await supabaseServer.auth.getUser();
-  if (!user) {
+    const { data: { user }, error } = await supabaseServer.auth.getUser();
+    
+    console.log('Auth result:', { 
+      hasUser: !!user, 
+      userId: user?.id, 
+      error: error?.message 
+    });
+    
+    if (!user) {
+      throw new AuthenticationError();
+    }
+    return user;
+  } catch (error) {
+    console.log('getUser function error:', error);
+    if (error instanceof AuthenticationError) {
+      throw error;
+    }
     throw new AuthenticationError();
   }
-  return user;
 }
 
 export const runtime = 'nodejs'; // Use Node.js runtime for streaming

@@ -55,7 +55,7 @@ async function fetchClientConfig(): Promise<ClientConfig | null> {
   return configPromise;
 }
 
-async function getSupabase() {
+function getSupabase() {
   if (!supabaseInstance) {
     let supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     let supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -65,19 +65,22 @@ async function getSupabase() {
       console.warn('Environment variables not embedded in client bundle, attempting server fetch...');
       serverConfigAttempted = true;
       
-      const config = await fetchClientConfig();
-      if (config) {
-        supabaseUrl = config.supabaseUrl;
-        supabaseAnonKey = config.supabaseAnonKey;
-      } else {
-        return null; // Fetch failed, will retry later
-      }
+      // Trigger async fetch but don't wait for it - store result for next call
+      fetchClientConfig().then(config => {
+        if (config) {
+          console.log('Server config fetched, storing for next initialization...');
+          window.__supabaseConfig = config;
+          supabaseInstance = null; // Reset to trigger re-initialization with new config
+        }
+      });
+      
+      return null; // Return null now, will work on next call after fetch completes
     }
     
     // Check for previously fetched config
     if (typeof window !== 'undefined' && window.__supabaseConfig && (!supabaseUrl || !supabaseAnonKey)) {
       const config = window.__supabaseConfig;
-      console.log('Using previously fetched server configuration');
+      console.log('Using server-fetched configuration');
       supabaseUrl = config.supabaseUrl;
       supabaseAnonKey = config.supabaseAnonKey;
     }
@@ -125,15 +128,11 @@ const createMockClient = () => ({
   })
 });
 
-// Track hydration state
-let hydrationComplete = false;
-
-// Check if we're in browser and hydration is complete
+// Check if we're in browser and add hydration logging
 if (typeof window !== 'undefined') {
-  // Wait for hydration to complete
+  // Wait for hydration to complete and log status
   setTimeout(() => {
-    hydrationComplete = true;
-    console.log('Client hydration complete, real Supabase client now available');
+    console.log('Client hydration complete, checking environment variables...');
     
     // Test that environment variables are actually available
     if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
@@ -144,37 +143,24 @@ if (typeof window !== 'undefined') {
   }, 1000);
 }
 
-// Export proxy that handles async methods
+// Create a simple getter that returns the client or mock
+function getSupabaseClient() {
+  const client = getSupabase();
+  
+  if (client) {
+    return client;
+  }
+  
+  // Return mock during hydration
+  console.log('Using mock Supabase client during initialization...');
+  return createMockClient() as unknown as ReturnType<typeof createClient>;
+}
+
+// Export the client - much simpler approach
 export const supabase = new Proxy({} as ReturnType<typeof createClient>, {
   get(target, prop) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Complex Supabase type inference in proxy
-    return async (...args: unknown[]) => {
-      try {
-        const client = await getSupabase();
-        if (!client) {
-          throw new Error('Client not ready');
-        }
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Method type is hard to specify generically
-        const method = client[prop as keyof typeof client] as any;
-        if (typeof method === 'function') {
-          return method.apply(client, args);
-        }
-        return method;
-      } catch (error) {
-        if (hydrationComplete) {
-          throw error;
-        }
-        // Mock during hydration
-        console.log('Using mock for async method during hydration:', prop);
-        const mockClient = createMockClient();
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Method type is hard to specify generically
-        const method = mockClient[prop as keyof typeof mockClient] as any;
-        if (typeof method === 'function') {
-          return method.apply(mockClient, args);
-        }
-        return method;
-      }
-    };
+    const client = getSupabaseClient();
+    return client[prop as keyof typeof client];
   }
 });
 

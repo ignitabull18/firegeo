@@ -74,14 +74,23 @@ function getSupabase() {
     }
     
     // If environment variables aren't embedded in client bundle, try server endpoint
+    console.log('🔬 DEBUGGING CONDITIONS:', {
+      isWindow: typeof window !== 'undefined',
+      supabaseUrl: !!supabaseUrl,
+      supabaseAnonKey: !!supabaseAnonKey,
+      serverConfigAttempted
+    });
+    
     if (typeof window !== 'undefined' && (!supabaseUrl || !supabaseAnonKey) && !serverConfigAttempted) {
       console.warn('🔍 Environment variables not embedded in client bundle, attempting server fetch...');
       serverConfigAttempted = true;
       
       // Immediately trigger the fetch and force a retry after it completes
       console.log('🚀 About to call fetchClientConfig()...');
+      console.log('🔧 Calling fetchClientConfig() now...');
       const configPromise = fetchClientConfig();
-      console.log('🔧 fetchClientConfig() called, promise created:', !!configPromise);
+      console.log('🔧 fetchClientConfig() returned, promise created:', !!configPromise);
+      console.log('🔧 Starting promise.then() chain...');
       
       configPromise.then(config => {
         console.log('📦 Promise resolved with config:', !!config);

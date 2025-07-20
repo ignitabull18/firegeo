@@ -1,16 +1,74 @@
 import { createClient } from '@supabase/supabase-js'
 import { useEffect, useState } from 'react'
 
+// Types
+interface ClientConfig {
+  supabaseUrl: string;
+  supabaseAnonKey: string;
+  appUrl: string;
+}
+
+declare global {
+  interface Window {
+    __supabaseConfig?: ClientConfig;
+  }
+}
+
 // Lazy initialization to prevent build-time errors
 let supabaseInstance: ReturnType<typeof createClient> | null = null;
+let configPromise: Promise<ClientConfig | null> | null = null;
+let serverConfigAttempted = false;
+
+// Fetch client configuration from server when env vars not available at build time
+async function fetchClientConfig(): Promise<ClientConfig | null> {
+  if (configPromise) return configPromise;
+  
+  configPromise = fetch('/api/client-config')
+    .then(res => res.json())
+    .then((config: ClientConfig) => {
+      console.log('✅ Successfully fetched Supabase config from server');
+      return config;
+    })
+    .catch(error => {
+      console.error('Failed to fetch client config:', error);
+      return null;
+    });
+  
+  return configPromise;
+}
 
 function getSupabase() {
   if (!supabaseInstance) {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
     
+    // If environment variables aren't embedded in client bundle, try server endpoint
+    if (typeof window !== 'undefined' && (!supabaseUrl || !supabaseAnonKey) && !serverConfigAttempted) {
+      console.warn('Environment variables not embedded in client bundle, attempting server fetch...');
+      serverConfigAttempted = true;
+      
+      // Async fetch - will resolve in subsequent calls
+      fetchClientConfig().then(config => {
+                 if (config && config.supabaseUrl && config.supabaseAnonKey) {
+           // Force re-initialization with server config
+           supabaseInstance = null;
+           // Store config temporarily for immediate use
+           window.__supabaseConfig = config;
+         }
+      });
+      
+      return null; // Return null for now, will retry
+    }
+    
+    // Check for server-fetched config
+    if (typeof window !== 'undefined' && window.__supabaseConfig && (!supabaseUrl || !supabaseAnonKey)) {
+      const config = window.__supabaseConfig;
+      console.log('Using server-fetched configuration');
+      supabaseInstance = createClient(config.supabaseUrl, config.supabaseAnonKey);
+      return supabaseInstance;
+    }
+    
     // During client-side hydration, environment variables might not be immediately available
-    // Check if we're in the browser and variables aren't available yet
     if (typeof window !== 'undefined' && (!supabaseUrl || !supabaseAnonKey)) {
       console.warn('Supabase environment variables not yet available during client hydration. Waiting...');
       
